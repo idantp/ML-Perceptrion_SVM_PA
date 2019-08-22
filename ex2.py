@@ -1,33 +1,30 @@
+# Idan Twito, 311125249
+# Roy Hevrony, 312498272
+
 import numpy as np
 import sys
-from scipy import stats
-import random
-import matplotlib.pyplot as plt
 from scipy.stats import zscore
 
 
-# TODO: normalization z-score ?
-# TODO: check that the normalization is correct.
-
+# normalization of type Zero_Score as we learned in class.
 def zero_score_norm(x_arr):
     for i in range(0, len(x_arr)):
         x_arr[i] = zscore(x_arr[i])
     return x_arr
 
 
-def test(test_x, test_y, w, algo):
-    results = []
-    num = 0
-    m = len(test_x)
-    for i in range(0, m):
+# runs the algorithm with the test set and the weights that the training algorithm returned.
+# adds each prediction to an array and finally returns the array when finished prediction.
+def predict(test_x, w):
+    prediction_results = []
+    test_length = len(test_x)
+    for i in range(0, test_length):
         y_hat = np.argmax(np.dot(w, test_x[i]))
-        if test_y[i] != y_hat:
-            results.append(y_hat)
-            num += 1
-    print(algo, "err: ", (float(num) / m), " good: ", 1 - (float(num) / m))
-    return results
+        prediction_results.append(y_hat)
+    return prediction_results
 
 
+# second normalization technique learned in class.
 def normalization(x_arr):
     transposed_x_arr = np.transpose(x_arr)
     temp_arr = []
@@ -41,15 +38,19 @@ def normalization(x_arr):
     return np.transpose(temp_arr)
 
 
+# SVM algorithm.
 def svm(x_arr, y_arr):
     iterations = 10
-    eta = 0.05
-    var_lambda = 0.1
+    eta = 0.01
+    var_lambda = 0.5
     weights_arr = np.zeros((3, 8))
+    # go over 10 iterations.
     for i in range(iterations):
+        # make sure that each X and Y are in the same place when shuffling.
         arr_zip = list(zip(x_arr, y_arr))
         np.random.shuffle(arr_zip)
         x_arr, y_arr = zip(*arr_zip)
+        # go over each pair x, y in the zipped arrays.
         for x, y in zip(x_arr, y_arr):
             # predict.
             y_hat = np.argmax(np.dot(weights_arr, x))
@@ -65,59 +66,87 @@ def svm(x_arr, y_arr):
                             eta, x)
                     else:
                         weights_arr[matrix_line_no, :] = np.multiply((1 - (var_lambda * eta)),
-                                                                     weights_arr[matrix_line_no,
-                                                                     :]) + np.multiply(eta, x)
-        if i > iterations / 2:
+                                                                     weights_arr[matrix_line_no, :])
+            else:
+                weights_arr[0, :] = np.multiply((1 - (var_lambda * eta)), weights_arr[0, :])
+                weights_arr[1, :] = np.multiply((1 - (var_lambda * eta)), weights_arr[1, :])
+                weights_arr[2, :] = np.multiply((1 - (var_lambda * eta)), weights_arr[2, :])
+        # divide the ETA by the iteration number each iteration.
+        if i > 0:
             eta /= i
     return weights_arr
 
 
+# Perceptron algorithm.
 def perceptron_algorithm(x_arr, y_arr):
     iterations = 10
     eta = 0.1
+    # initialize the weights array with zeros.
     weights_arr = np.zeros((3, 8))
+    # go over 10 iterations to train the algorithm.
     for i in range(iterations):
+        # zip the arrays together so that in shuffle mode it won't change.
         arr_zip = list(zip(x_arr, y_arr))
         np.random.shuffle(arr_zip)
         x_arr, y_arr = zip(*arr_zip)
+        # go over each pair of x,y in the zipped arrays.
         for x, y in zip(x_arr, y_arr):
-            # predict.
+            # predict - returns the most probable label
             y_hat = np.argmax(np.dot(weights_arr, x))
             # update
             if y != y_hat:
                 weights_arr[y, :] = weights_arr[y, :] + np.multiply(eta, x)
                 weights_arr[y_hat, :] = weights_arr[y_hat, :] - np.multiply(eta, x)
-        if i > iterations / 2:
+        # divide the ETA by the iteration number each iteration.
+        if i > 0:
             eta /= i
     return weights_arr
 
 
+# calculate the loss of the PA algorithm.
 def loss_function_pa(weights_arr, y, y_hat, x):
     return max(0.0, 1 - np.dot(weights_arr[y], x) + np.dot(weights_arr[y_hat], x))
 
 
+# Passive Aggressive algorithm.
 def pa_algorithm(x_arr, y_arr):
     iterations = 10
+    loss_counter = 0
+    # initialize the weights array to zero.
     weights_arr = np.zeros((3, 8))
+    temp_weights = weights_arr
+    # go over 10 iterations.
     for i in range(iterations):
+        # zip the two arrays together to not lose the places of the training set and its prediction.
         arr_zip = list(zip(x_arr, y_arr))
         np.random.shuffle(arr_zip)
         x_arr, y_arr = zip(*arr_zip)
+        # go over each pair in the zipped arrays.
         for x, y in zip(x_arr, y_arr):
             # predict.
             y_hat = np.argmax(np.dot(weights_arr, x))
             # update
             if y != y_hat:
                 loss = loss_function_pa(weights_arr, y, y_hat, x)
-                divide_by = ((np.power(np.linalg.norm(x), 2)) * 2)
+                divide_by = ((np.power(np.linalg.norm(x, ord=2), 2)) * 2)
+                # to rule out division by zero.
                 if divide_by != 0:
-                    loss /= divide_by
-                    weights_arr[y, :] = weights_arr[y, :] + np.multiply(loss, x)
-                    weights_arr[y_hat, :] = weights_arr[y_hat, :] - np.multiply(loss, x)
-    return weights_arr
+                    loss_counter += 1
+                    tau = loss / divide_by
+                    weights_arr[y, :] = weights_arr[y, :] + np.multiply(tau, x)
+                    weights_arr[y_hat, :] = weights_arr[y_hat, :] - np.multiply(tau, x)
+                    # in order to calculate the average and return it.
+                    temp_weights = np.add(temp_weights, weights_arr)
+    # calculate the average in case that the loss_counter is not zero.
+    if loss_counter != 0:
+        return temp_weights / loss_counter
+    else:
+        return weights_arr
 
 
-def read_from_files(x_arr, y_arr):
+# create 3 arrays, each one from the file that was given in the command line.
+# returns the number of items in the training set array.
+def read_from_files(x_arr, y_arr, test_arr):
     # go over the x training file and turn it into an array to append to the original array.
     counter = 0
     with open(sys.argv[1]) as path:
@@ -146,9 +175,25 @@ def read_from_files(x_arr, y_arr):
             else:
                 y_arr.append(2)
             line = path2.readline()
+
+    with open(sys.argv[3]) as path3:
+        line = path3.readline()
+        while line:
+            # split the line into a list by commas.
+            temp = line.split(',')
+            # change the letter to fit a certain number on a scale.
+            if temp[0] == 'M':
+                temp[0] = 0.25
+            elif temp[0] == 'F':
+                temp[0] = 0.50
+            else:
+                temp[0] = 0.75
+            test_arr.append(list(map(float, temp)))
+            line = path3.readline()
     return counter
 
 
+# splits the array.
 def array_splitter(start_index, end_index, array):
     temp_arr = []
     for row in range(start_index, end_index):
@@ -156,31 +201,36 @@ def array_splitter(start_index, end_index, array):
     return temp_arr
 
 
+# print the predictions of each algo.
+def print_predictions(perceptron_arr, svm_arr, pa_arr):
+    for i in range(len(perceptron_arr)):
+        print("perceptron: {0}, svm: {1}, pa: {2}".format((perceptron_arr[i]), (svm_arr[i]),
+                                                          (pa_arr[i])))
+
+
+# main function.
 def main():
     x_arr = []
     y_arr = []
-    sets_amount = read_from_files(x_arr, y_arr)
-    training_sets_amount = int((sets_amount * 5) / 6)
-    testing_sets_index = training_sets_amount
+    testing_set_arr = []
+    # read from the files.
+    read_from_files(x_arr, y_arr, testing_set_arr)
+    # zip the arrays.
     y_arr = list(map(int, y_arr))
-    x_arr = normalization(x_arr)
-    # x_arr = zero_score_norm(x_arr)
     arr_zipped = list(zip(x_arr, y_arr))
-    # TODO
     np.random.shuffle(arr_zipped)
-    shuffled_x_arr, shuffled_y_arr = zip(*arr_zipped)
-    x_training_sets = array_splitter(0, training_sets_amount, shuffled_x_arr)
-    x_testing_sets = array_splitter(testing_sets_index, sets_amount, shuffled_x_arr)
-    x_training_sets = np.array(x_training_sets)
-    x_testing_sets = np.array(x_testing_sets)
-    y_training_sets = array_splitter(0, training_sets_amount, shuffled_y_arr)
-    y_testing_sets = array_splitter(testing_sets_index, sets_amount, shuffled_y_arr)
-    w = perceptron_algorithm(x_training_sets, y_training_sets)
-    w2 = pa_algorithm(x_training_sets, y_training_sets)
-    w3 = svm(x_training_sets, y_training_sets)
-    test(x_testing_sets, y_testing_sets, w, "PERCEPTRON")
-    test(x_testing_sets, y_testing_sets, w2, "PA")
-    test(x_testing_sets, y_testing_sets, w3, "SVM")
+    # turn it into an numpy array.
+    x_arr = np.array(x_arr)
+    # calculate the weights for each algorithm.
+    w = perceptron_algorithm(x_arr, y_arr)
+    w2 = svm(x_arr, y_arr)
+    w3 = pa_algorithm(x_arr, y_arr)
+    # calculate the predictions from each algorithm using the weights from the training.
+    perceptron_arr = predict(testing_set_arr, w)
+    svm_arr = predict(testing_set_arr, w2)
+    pa_arr = predict(testing_set_arr, w3)
+    # print the results.
+    print_predictions(perceptron_arr, svm_arr, pa_arr)
 
 
 if __name__ == "__main__":
